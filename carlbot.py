@@ -35,7 +35,7 @@ intents.members = True
 
 INITIAL_EXTENSIONS = [
     'cogs.misc',
-    'cogs.why',
+    #'cogs.why',
     'cogs.quotes'
     ]
 
