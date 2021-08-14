@@ -33,6 +33,29 @@ class quotes(commands.Cog):
             await cur.execute(sql_input)
             await db.commit()
         
+    async def quote_modify(self, ctx, number: int):
+        
+        if (number < 1):
+            await ctx.send('Use a number above zero, dumbass.')
+            return False
+        
+        async with aiosqlite.connect("discord_quotes.db") as db:
+            async with db.cursor() as cur:
+                guild_id = ctx.guild.id
+                member_id = ctx.message.author.id
+                sql_input = "SELECT * FROM quotes WHERE num_id = ? AND guild_id = ? AND marked = 0"
+                await cur.execute(sql_input, (number, guild_id))                
+                select = await cur.fetchone()
+                
+                if select == None:
+                    await ctx.send('That quote can\'t be found!')
+                    return False
+                
+                if select[2] != member_id:
+                    await ctx.send('You can\'t modify quotes that aren\'t your own, moron.')
+                    return False
+        
+        return True
     
     @commands.group(name='quote', invoke_without_command=True)
     async def quote(self, ctx, number = None):
@@ -40,7 +63,7 @@ class quotes(commands.Cog):
         guild_id = ctx.guild.id
         async with aiosqlite.connect("discord_quotes.db") as db:
             async with db.cursor() as cur:
-                count_input = "SELECT COUNT(*) FROM quotes WHERE guild_id = ?"
+                count_input = "SELECT COUNT(*) FROM quotes WHERE guild_id = ? AND marked = 0"
                 await cur.execute(count_input, (guild_id,))
                 count = (await cur.fetchone())[0]
                 
@@ -65,7 +88,6 @@ class quotes(commands.Cog):
                     if (quote_val == 0):
                         await ctx.send('There\'s no quote zero, idiot.')
                         return
-                    
                     elif (quote_val < 0):
                         await ctx.send('There\'s nothing here!')
                         return
@@ -77,7 +99,6 @@ class quotes(commands.Cog):
                     if (len(select) == 0):
                         await ctx.send('That quote can\'t be found!')
                         return
-                    
                     await ctx.send(select[0])
                 
                 except ValueError: 
@@ -106,16 +127,49 @@ class quotes(commands.Cog):
                     insert_input = "INSERT INTO quotes VALUES (?,?,?,?, 0)"
                     await cur.execute(insert_input, (count, guild_id, member_id, text))
                 else:
-                    count = del_search[4]
-                    update_input = "UPDATE quotes SET user = ? AND message = ? AND marked = 0 WHERE guild_id = ? AND num_id = ?"
+                    count = del_search[0]
+                    update_input = "UPDATE quotes SET user = ?, message = ?, marked = 0 WHERE guild_id = ? AND num_id = ?"
                     await cur.execute(update_input, (member_id, text, guild_id, count))
                 await db.commit()
                 
         await ctx.send(f'Quote added as number {count}!')
     
+    # 'deletes' a quote by flagging it, preventing it from being searched by the default !quote command
+    # this is so gap indexes between quotes will be filled
     @quote.command(name='remove', aliases = ['del', 'delete'])
     async def quote_delete(self, ctx, number : int):
-        return
+        
+        validity = await self.quote_modify(ctx, number)
+        
+        if(not(validity)):
+            return
+        
+        async with aiosqlite.connect("discord_quotes.db") as db:
+            async with db.cursor() as cur:
+                guild_id = ctx.guild.id
+                sql_input = "UPDATE quotes SET marked = 1 WHERE guild_id = ? AND num_id = ?"
+                await cur.execute(sql_input, (guild_id, number))
+            await db.commit()
+          
+        await ctx.send(f'Quote {number} has been deleted!')
+    
+    # alters the content of a quote, provided you are the original submitter
+    @quote.command(name='edit')
+    async def quote_edit(self, ctx, number: int, *, text : str):
+        
+        validity = await self.quote_modify(ctx, number)
+        
+        if(not(validity)):
+            return
+        
+        async with aiosqlite.connect("discord_quotes.db") as db:
+            async with db.cursor() as cur:
+                guild_id = ctx.guild.id
+                sql_input = "UPDATE quotes SET message = ? WHERE guild_id = ? AND num_id = ?"
+                await cur.execute(sql_input, (text, guild_id, number))
+            await db.commit()
+        
+        await ctx.send('Your quote has been edited!')
     
     @quote.command(name='help')
     async def quote_help(self, ctx):
@@ -125,6 +179,18 @@ class quotes(commands.Cog):
         embed.add_field(name="!quote remove <number>", value="Removes the selected quote to the list of quotes. Only works if you're the original submitter. Aliased to 'del' and 'delete.'", inline=False)
         embed.add_field(name="!quote edit <number> <text>", value="Replaces the text of the numbered quote. Only works if you're the original submitter.", inline=False)
         await ctx.channel.send(content=None, embed=embed)
+        
+    @quote_delete.error
+    async def delete_error(self, ctx, error):
+            
+        if isinstance (error, commands.BadArgument):
+            await ctx.send('Please submit a valid number for deleting quotes!')
+    
+    @quote_edit.error
+    async def edit_error(self, ctx, error):
+        
+        if isinstance(error, commands.BadArgument):
+            await ctx.send('Please format as !quote edit <number> <text>!')
     
 def setup(bot):
     bot.add_cog(quotes(bot))
