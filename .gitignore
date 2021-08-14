@@ -117,3 +117,4 @@ dmypy.json
 cogs/json/
 untitled0.py
 bot.py
+*.db
