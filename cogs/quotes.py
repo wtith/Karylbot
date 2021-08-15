@@ -7,7 +7,10 @@ SQL table format is as follows:
 
 num_id || guild_id || user || message || marked
 num_id: index of the quote
-user: 
+guild_id: guild id of the quote
+user: user id of the quote
+message: text of the quote
+marked: 'fake' deletion flag that shows it can be replaced
 
 """
 
