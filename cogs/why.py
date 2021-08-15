@@ -4,8 +4,6 @@
 Originally made to parse the RSS feed of a vBulletin forum I use. As a result,
 it's not particularly good at dealing with normal RSS feed uses.
 
-
-
 """
 
 import os
